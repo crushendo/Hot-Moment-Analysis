@@ -9,18 +9,16 @@ import psycopg2
 from configparser import ConfigParser
 from pathlib import Path
 from config.config import config
+from src.data.db_conn import load_db_table
+from config.config import get_project_root
 
 class hot_moment():
 
     def main(self):
-
-
-    # Take in a PostgreSQL table and outputs a pandas dataframe
-    def load_db_table(config_db, query):
-        params = config(config_db)
-        engine = psycopg2.connect(**params)
-        data = pd.read_sql(query, con=engine)
-        return data
+        PROJECT_ROOT = get_project_root()
+        # Read database - PostgreSQL
+        df = load_db_table(config_db='database.ini', query='SELECT * FROM "DailyPredictors" LIMIT 5')
+        print(df)
 
 
 
