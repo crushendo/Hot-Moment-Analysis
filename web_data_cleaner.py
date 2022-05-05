@@ -5,12 +5,14 @@ import statistics
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime, timedelta
+import os
+import shutil
 
 class data_cleaner():
 
     def main(self):
-        filename = "Precip.csv"
-        n20filename = "all-flux-ghad.csv"
+        filename = "unprocessed/CON Flux.csv"
+        n20filename = filename
         datatype = ""
         if "flux" in filename.lower():
             datatype = "n2o_flux"
@@ -32,8 +34,8 @@ class data_cleaner():
         fluxstart = list(fluxdf.loc[:,"Date"])[0]
         fluxend = list(fluxdf.loc[:, "Date"])[-1]
         try:
-            fluxstart = datetime.strptime(fluxstart, "%m/%d/%Y %H:%M")
-            fluxend = datetime.strptime(fluxend, "%m/%d/%Y %H:%M")
+            fluxstart = datetime.strptime(fluxstart, "%Y/%m/%d %H:%M")
+            fluxend = datetime.strptime(fluxend, "%Y/%m/%d %H:%M")
         except:
             fluxstart = datetime.strptime(fluxstart, "%Y/%m/%d")
             fluxend = datetime.strptime(fluxend, "%Y/%m/%d")
@@ -60,6 +62,7 @@ class data_cleaner():
         dailydf = data_cleaner.daily_avg(fluxstart, fluxend, predictordf, datatype)
         df_reindexed, df_plotting = data_cleaner.interpolator(fluxstart, fluxend, dailydf, datatype, fluxdf)
         data_cleaner.write_csv(df_reindexed, filename)
+        shutil.move(filename, "original-files/")
 
         # Plot data before and after
         fig = plt.figure()
@@ -134,7 +137,7 @@ class data_cleaner():
         return df_reindexed, df_plotting
 
     def write_csv(self, df_reindexed, filename):
-        df_reindexed.to_csv(filename[:-4] + "_cleaned.csv")
+        df_reindexed.to_csv("processed/" + filename[12:-4] + "_cleaned.csv")
 
 
 # Press the green button in the gutter to run the script.
