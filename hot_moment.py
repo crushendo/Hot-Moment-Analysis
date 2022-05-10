@@ -19,6 +19,12 @@ from config.config import get_project_root
 class hot_moment():
 
     def main(self):
+
+        PROJECT_ROOT = get_project_root()
+        # Read database - PostgreSQL
+        df = load_db_table(config_db='database.ini', query='SELECT * FROM "DailyPredictors" LIMIT 5')
+        print(df)
+
         # Project root
         PROJECT_ROOT = get_project_root()  # Read database - PostgreSQL
         df = load_db_table(config_db='database.ini', query='SELECT * FROM "DailyPredictors"')
@@ -224,6 +230,7 @@ class hot_moment():
             cur.execute(QUERY)
         cur.execute('COMMIT')
         return imr_metrics
+
 
 
 
