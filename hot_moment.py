@@ -22,11 +22,13 @@ class hot_moment():
         # Project root
         PROJECT_ROOT = get_project_root()  # Read database - PostgreSQL
         df = load_db_table(config_db='database.ini', query='SELECT * FROM "DailyPredictors"')
-        print(df)
         #hot_moment.iqr_classifier(df)
-        df = load_db_table(config_db='database.ini', query='SELECT * FROM "DailyPredictors"')
-        hot_moment.iqr_graph(df)
+        #hot_moment.iqr_graph(df)
         #hot_moment.imr_classifier(df)
+        exp_num_list = np.arange(30,37)
+        for exp_num in exp_num_list:
+            print(exp_num)
+            hot_moment.imr_graph(df, exp_num)
 
     def iqr_graph(self, df):
         exp_num = 33
@@ -39,6 +41,71 @@ class hot_moment():
         plt.scatter(hotdf['date'], hotdf['n2o_flux'], color='r', label='Hot Moment')
         plt.scatter(colddf['date'], colddf['n2o_flux'], color='b', label='Background')
         #plt.plot(expdf['date'], expdf['n2o_flux'], color='gray')
+
+        plt.legend()
+        plt.show()
+
+    def imr_graph(self, df, exp_num):
+        #exp_num = 11
+        expdf = df.query('experiment_id == @exp_num')
+        fluxdf = expdf.n2o_flux.to_frame()
+        expdf = df.query('experiment_id == @exp_num')
+        if (fluxdf <= 1).values.any():
+            shift = abs(fluxdf['n2o_flux'].min(axis=0)) + 1
+        else:
+            shift = 0
+        fluxdf['n2o_flux'] += shift
+        q75, q25 = np.percentile(fluxdf['n2o_flux'], [75, 25])
+        iqr = q75 - q25
+        threshold = q75 + iqr
+        filtered_df = fluxdf.query('n2o_flux <= @threshold')
+        # filtered_df = fluxdf.query('n2o_flux > 0')
+        filtered_series = filtered_df.squeeze()
+        original_data = expdf['n2o_flux']
+
+        # Boxcox transform training data & save lambda value
+        fitted_data, fitted_lambda = stats.boxcox(filtered_series)
+
+        # IMR Calculations
+        ibar = statistics.mean(fitted_data)
+        i = 0
+        mr_list = []
+        while i < len(fitted_data):
+            if i == 0:
+                mr = 0
+            else:
+                mr = abs(fitted_data[i] - fitted_data[i - 1])
+            mr_list.append(mr)
+            i += 1
+        mr_bar = statistics.mean(mr_list)
+        i_sigma = mr_bar / 1.128
+        pos_1sig = ibar + i_sigma
+        pos_2sig = ibar + 2 * i_sigma
+        pos_3sig = ibar + 3 * i_sigma
+        neg_1sig = ibar - i_sigma
+        neg_2sig = ibar - 2 * i_sigma
+        neg_3sig = ibar - 3 * i_sigma
+        imr_metrics = [ibar, mr_bar, pos_1sig, pos_2sig, pos_3sig, neg_1sig, neg_2sig, neg_3sig]
+        print(imr_metrics)
+        # Transform IMR metrics back to original scale
+        imr_metrics = scipy.special.inv_boxcox(imr_metrics, fitted_lambda)
+        imr_metrics = [x - shift for x in imr_metrics]
+
+        colddf = df.loc[(df["experiment_id"] == exp_num)]
+        colddf.loc[df["imr_hm"] == True, "n2o_flux"] = np.nan
+        hotdf = df.loc[(df["experiment_id"] == exp_num)]
+        hotdf.loc[df["imr_hm"] == False, "n2o_flux"] = np.nan
+
+        plt.style.use('fivethirtyeight')
+        plt.figure(figsize=(10, 8))
+        plt.yscale('log')
+        plt.scatter(hotdf['date'], hotdf['n2o_flux'], color='r', label='Hot Moment')
+        plt.scatter(colddf['date'], colddf['n2o_flux'], color='b', label='Background')
+        plt.axhline(y=imr_metrics[0], color='black', linestyle='dashed')
+        plt.axhline(y=imr_metrics[2], color='yellow', linestyle=':')
+        plt.axhline(y=imr_metrics[3], color='orange', linestyle=':')
+        plt.axhline(y=imr_metrics[4], color='r', linestyle=':')
+        # plt.plot(expdf['date'], expdf['n2o_flux'], color='gray')
 
         plt.legend()
         plt.show()
@@ -156,6 +223,8 @@ class hot_moment():
                     """ % (fulldf['imr_hm'][d], fulldf['id'][d])
             cur.execute(QUERY)
         cur.execute('COMMIT')
+        return imr_metrics
+
 
 
 
