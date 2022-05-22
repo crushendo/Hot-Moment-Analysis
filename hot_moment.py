@@ -2,7 +2,6 @@ import random
 import numpy
 import pandas as pd
 import statistics
-
 import scipy.special
 from scipy import stats
 import matplotlib.pyplot as plt

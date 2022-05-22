@@ -4,11 +4,7 @@ import pandas as pd
 import statistics
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime, timedelta
-from config.config import config
 from src.data.db_conn import load_db_table
-from config.config import get_project_root
-import psycopg2
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
