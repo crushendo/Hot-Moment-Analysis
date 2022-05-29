@@ -20,13 +20,13 @@ class data_cleaner(tk.Frame):
         n_forms = nitrogen_formdf.nitrogen_form.unique()
         print(n_forms)
         exp_id, n2o_units, no3_units, nh4_units, bulk_density, sampling_depth_cm, fert_dates, \
-            plant_dates, till_dates = data_cleaner.input(n_forms)
+            plant_dates, till_dates, harvest_dates, plant_crops = data_cleaner.input(n_forms)
         dir_list = os.listdir("unprocessed/")
         for filename in dir_list:
             filename = "unprocessed/" + filename
             n20filename = filename
             datatype = ""
-            if "flux" in filename.lower():
+            if "flux" in filename.lower() or "n2o" in filename.lower():
                 datatype = "n2o_flux"
             elif "precip" in filename.lower():
                 datatype = "precipitation_mm"
@@ -97,7 +97,7 @@ class data_cleaner(tk.Frame):
         # Reorganize column order
         db_columns = ['experiment_id', 'Date', 'n2o_flux', 'soil_vwc', 'soil_wfps', 'soil_temp_c', 'air_temp_c',
                       'precipitation_mm', 'nitrogen_applied_kg_ha', 'nitrogen_form', 'mgmt', 'nh4_mg_n_kg',
-                      'no3_mg_n_kg']
+                      'no3_mg_n_kg', 'planted_crop']
         df_columns = fulldf.columns
         shared_columns = []
         for column in db_columns:
@@ -119,15 +119,19 @@ class data_cleaner(tk.Frame):
             fulldf.drop("n2o_flux", axis=1, inplace=True)
             fulldf["n2o_flux"] = b
         if no3_units == "kg-N/ha":
-            b = fulldf[["no3_mg_n_kg"]].apply(lambda a: a / (float(bulk_density) * float(sampling_depth_cm) * 10))
+            b = fulldf[["no3_mg_n_kg"]].apply(lambda a: a / (float(bulk_density) * float(sampling_depth_cm / 100) * 10))
             print(b)
             fulldf.drop("no3_mg_n_kg", axis=1, inplace=True)
             fulldf["no3_mg_n_kg"] = b
         if nh4_units == "kg-N/ha":
-            b = fulldf[["nh4_mg_n_kg"]].apply(lambda a: a / (float(bulk_density) * float(sampling_depth_cm) * 10))
+            b = fulldf[["nh4_mg_n_kg"]].apply(lambda a: a / (float(bulk_density) * float(sampling_depth_cm / 100) * 10))
             print(b)
             fulldf.drop("nh4_mg_n_kg", axis=1, inplace=True)
             fulldf["nh4_mg_n_kg"] = b
+        if fulldf.soil_wfps[0] > 1:
+            b = fulldf[["soil_wfps"]].apply(lambda a: a / 100)
+            fulldf.drop("soil_wfps", axis=1, inplace=True)
+            fulldf["soil_wfps"] = b
         return fulldf
 
     def add_management(self, fulldf):
@@ -135,6 +139,7 @@ class data_cleaner(tk.Frame):
         fulldf = fulldf.assign(mgmt=None)
         fulldf = fulldf.assign(nitrogen_form=None)
         fulldf = fulldf.assign(nitrogen_applied_kg_ha=0)
+        fulldf = fulldf.assign(planted_crop=None)
         print(fulldf.head())
         for date in till_dates:
             if date[1] == "/":
@@ -144,6 +149,7 @@ class data_cleaner(tk.Frame):
             date = str(date)
             index_list = fulldf.query("Date == @date").index.tolist()
             fulldf.at[index_list[0], 'mgmt'] = "tillage"
+        i = 0
         for date in plant_dates:
             if date[1] == "/":
                 date = "0" + date
@@ -152,6 +158,8 @@ class data_cleaner(tk.Frame):
             date = str(date)
             index_list = fulldf.query("Date == @date").index.tolist()
             fulldf.at[index_list[0], 'mgmt'] = "planting"
+            fulldf.at[index_list[0], 'planted_crop'] = plant_crops[i]
+            i += 1
         i = 0
         for date in fert_dates:
             if date[1] == "/":
@@ -167,6 +175,14 @@ class data_cleaner(tk.Frame):
             except:
                 pass
             i += 1
+        for date in harvest_dates:
+            if date[1] == "/":
+                date = "0" + date
+            date = datetime.strptime(date, "%m/%d/%y")
+            date = date.strftime("%Y-%m-%d")
+            date = str(date)
+            index_list = fulldf.query("Date == @date").index.tolist()
+            fulldf.at[index_list[0], 'mgmt'] = "harvest"
         return fulldf
 
     def input(self, n_forms):
@@ -263,13 +279,22 @@ class data_cleaner(tk.Frame):
         till_apps = tk.StringVar()
         till_input = ttk.Entry(frame, textvariable=till_apps)
         till_input.grid(column=1, row=9, **options)
-        exp_id = exp_id_var.get()
+
+        # Harvest Dates
+        harvest_label = ttk.Label(frame, text='Harvest Dates (#)')
+        harvest_label.grid(column=0, row=10, sticky='W', **options)
+        harvest_apps = tk.StringVar()
+        harvest_input = ttk.Entry(frame, textvariable=harvest_apps)
+        harvest_input.grid(column=1, row=10, **options)
+
+        global exp_id
         global n2o_units
         global no3_units
         global nh4_units
         global fert_num
         global plant_num
         global till_num
+        global harvest_num
 
         def enter_button_clicked():
             global exp_id
@@ -288,16 +313,20 @@ class data_cleaner(tk.Frame):
             plant_num = float(plant_input.get())
             global till_num
             till_num = float(till_input.get())
+            global harvest_num
+            harvest_num = float(harvest_input.get())
             root.destroy()
             root.quit()
 
         enter_button = ttk.Button(frame, text='Enter', command=enter_button_clicked)
-        enter_button.grid(column=1, row=10, sticky='W', **options)
+        enter_button.grid(column=1, row=11, sticky='W', **options)
 
         # add padding to the frame and show it
         frame.grid(padx=10, pady=10)
         root.mainloop()
 
+        global bulk_density
+        global sampling_depth_cm
         if no3_units == "kg-N/ha" or nh4_units == "kg-N/ha":
             # Secondary Input Box
             root = tk.Tk()
@@ -330,19 +359,23 @@ class data_cleaner(tk.Frame):
             depth_input = ttk.Entry(frame, textvariable=sampling_depth)
             depth_input.grid(column=1, row=1, **options)
             depth_input.focus()
-            # add padding to the frame and show it
-            frame.grid(padx=10, pady=10)
-            root.mainloop()
 
             def second_enter_button_clicked():
                 global bulk_density
                 bulk_density = float(bd_input.get())
+                print(bulk_density)
                 global sampling_depth_cm
                 sampling_depth_cm = float(depth_input.get())
                 root.destroy()
+                root.quit()
 
             enter_button = ttk.Button(frame, text='Enter', command=second_enter_button_clicked)
             enter_button.grid(column=1, row=10, sticky='W', **options)
+
+            # add padding to the frame and show it
+            frame.grid(padx=10, pady=10)
+            root.mainloop()
+
         else:
             bulk_density = ''
             sampling_depth_cm = ''
@@ -357,7 +390,7 @@ class data_cleaner(tk.Frame):
         for num in np.arange(1, int(fert_num) + 1):
             root = tk.Tk()
             root.title('Fertilization Date #{}'.format(num))
-            window_width = 500
+            window_width = 600
             window_height = 200
             # get the screen dimension
             screen_width = root.winfo_screenwidth()
@@ -395,7 +428,7 @@ class data_cleaner(tk.Frame):
             form_var = tk.StringVar(root)
             form_var.set('urea')
             popupMenu = ttk.OptionMenu(frame, form_var, *n_forms)
-            ttk.Label(frame, text="Choose a dish").grid(row=5, column=0)
+            ttk.Label(frame, text="Fertilizer Form").grid(row=5, column=0)
             popupMenu.grid(row=5, column=1)
             # on change dropdown value
             def change_dropdown(*args):
@@ -414,6 +447,8 @@ class data_cleaner(tk.Frame):
         # Planting Date Input
         global plant_dates
         plant_dates = []
+        global plant_crops
+        plant_crops = []
         for num in np.arange(1, int(plant_num) + 1):
             root = tk.Tk()
             root.title('Planting Date #{}'.format(num))
@@ -430,18 +465,27 @@ class data_cleaner(tk.Frame):
             frame = ttk.Frame(root)
             options = {'padx': 5, 'pady': 5}
 
+            # Planted crop
+            app_label = ttk.Label(frame, text='Planted Crop')
+            app_label.grid(column=0, row=4, sticky='W', **options)
+            planted_crop_var = tk.StringVar()
+            crop_input = ttk.Entry(frame, textvariable=planted_crop_var)
+            crop_input.grid(column=1, row=4, sticky='W', **options)
+
             def plant_date_enter():
                 plant_date = dentry.get()
                 plant_dates.append(plant_date)
                 print(plant_date)
+                planted_crop = crop_input.get()
+                plant_crops.append(planted_crop)
                 root.destroy()
                 root.quit()
 
             enter_button = ttk.Button(frame, text='Enter', command=plant_date_enter)
-            enter_button.grid(column=2, row=3, sticky='W', **options)
+            enter_button.grid(column=2, row=5, sticky='W', **options)
 
             dentry = DateEntry(root, font=('Helvetica', 40, tk.NORMAL), border=0)
-            dentry.grid(column=3, row=0, sticky='W', **options)
+            dentry.grid(column=0, row=0, sticky='W', **options)
             root.bind('<Return>', lambda e: print(dentry.get()))
             # add padding to the frame and show it
             frame.grid(padx=10, pady=10)
@@ -450,7 +494,7 @@ class data_cleaner(tk.Frame):
         # Tillage Date Input
         global till_dates
         till_dates = []
-        for num in np.arange(1, int(plant_num) + 1):
+        for num in np.arange(1, int(till_num) + 1):
             root = tk.Tk()
             root.title('Tillage Date #{}'.format(num))
             window_width = 500
@@ -477,6 +521,42 @@ class data_cleaner(tk.Frame):
             enter_button.grid(column=2, row=3, sticky='W', **options)
 
             dentry = DateEntry(root, font=('Helvetica', 40, tk.NORMAL), border=0)
+            dentry.grid(column=0, row=0, sticky='W', **options)
+            root.bind('<Return>', lambda e: print(dentry.get()))
+            # add padding to the frame and show it
+            frame.grid(padx=10, pady=10)
+            root.mainloop()
+
+        # Harvest Date Input
+        global harvest_dates
+        harvest_dates = []
+        for num in np.arange(1, int(harvest_num) + 1):
+            root = tk.Tk()
+            root.title('Harvest Date #{}'.format(num))
+            window_width = 500
+            window_height = 200
+            # get the screen dimension
+            screen_width = root.winfo_screenwidth()
+            screen_height = root.winfo_screenheight()
+            # find the center point
+            center_x = int(screen_width / 2 - window_width / 2)
+            center_y = int(screen_height / 2 - window_height / 2)
+            # set the position of the window to the center of the screen
+            root.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
+            frame = ttk.Frame(root)
+            options = {'padx': 5, 'pady': 5}
+
+            def harvest_date_enter():
+                harvest_date = dentry.get()
+                harvest_dates.append(harvest_date)
+                print(harvest_dates)
+                root.destroy()
+                root.quit()
+
+            enter_button = ttk.Button(frame, text='Enter', command=harvest_date_enter)
+            enter_button.grid(column=2, row=3, sticky='W', **options)
+
+            dentry = DateEntry(root, font=('Helvetica', 40, tk.NORMAL), border=0)
             dentry.grid(column=3, row=0, sticky='W', **options)
             root.bind('<Return>', lambda e: print(dentry.get()))
             # add padding to the frame and show it
@@ -484,7 +564,7 @@ class data_cleaner(tk.Frame):
             root.mainloop()
 
         return exp_id, n2o_units, no3_units, nh4_units, bulk_density, sampling_depth_cm, fert_dates, \
-               plant_dates, till_dates
+               plant_dates, till_dates, harvest_dates, plant_crops
 
 
     def __init__(self, master=None, frame_look={}, **look):
