@@ -18,6 +18,7 @@ class data_cleaner(tk.Frame):
         nitrogen_formdf = load_db_table(config_db='database.ini', query='SELECT nitrogen_form FROM "DailyPredictors"')
         nitrogen_formdf['nitrogen_form'] = nitrogen_formdf['nitrogen_form'].str.lower()
         n_forms = nitrogen_formdf.nitrogen_form.unique()
+        n_forms = np.append(n_forms, "other")
         print(n_forms)
         exp_id, n2o_units, no3_units, nh4_units, bulk_density, sampling_depth_cm, fert_dates, \
             plant_dates, till_dates, harvest_dates, plant_crops = data_cleaner.input(n_forms)
@@ -47,6 +48,8 @@ class data_cleaner(tk.Frame):
             print(datatype)
             fluxdf = pd.read_csv(n20filename, header=None, names=['Date', 'Data'])
             predictordf = pd.read_csv(filename, header=None, names=['Date', datatype])
+            if predictordf["Date"].iloc[0] == "Date" or predictordf["Date"].iloc[0] == " Date":
+                predictordf = predictordf.iloc[1:]
             predictordf.sort_values(by='Date', inplace=True)
             predictordf = predictordf.reset_index(drop=True)
             originaldf = predictordf
@@ -151,6 +154,7 @@ class data_cleaner(tk.Frame):
             fulldf.at[index_list[0], 'mgmt'] = "tillage"
         i = 0
         for date in plant_dates:
+            print(date)
             if date[1] == "/":
                 date = "0" + date
             date = datetime.strptime(date, "%m/%d/%y")
@@ -409,6 +413,9 @@ class data_cleaner(tk.Frame):
                 app_quant_i = quant_input.get()
                 fert_quantities.append(app_quant_i)
                 fert_form = form_var.get()
+                print(fert_form)
+                if fert_form == "other":
+                    fert_form = other_form_input.get()
                 fert_forms.append(fert_form)
                 root.destroy()
                 root.quit()
@@ -425,14 +432,23 @@ class data_cleaner(tk.Frame):
             quant_input.grid(column=1, row=4, sticky='W', **options)
 
             # Nitrogen Form dropdown
+            global hidden
+            hidden = True
             form_var = tk.StringVar(root)
             form_var.set('urea')
             popupMenu = ttk.OptionMenu(frame, form_var, *n_forms)
             ttk.Label(frame, text="Fertilizer Form").grid(row=5, column=0)
             popupMenu.grid(row=5, column=1)
+            other_form_var = tk.StringVar()
+            other_form_input = ttk.Entry(frame, textvariable=other_form_var)
             # on change dropdown value
             def change_dropdown(*args):
                 print(form_var.get())
+                fert_form = form_var.get()
+                if fert_form == "other":
+                    other_form_input.grid(row=6, column=0)
+                else:
+                    other_form_input.grid_remove()
             # link function to change dropdown
             form_var.trace('w', change_dropdown)
 
