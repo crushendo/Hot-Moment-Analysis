@@ -111,7 +111,7 @@ class data_cleaner(tk.Frame):
         print(fulldf.head())
 
         # Write to CSV
-        fulldf.to_csv("processed/alldata.csv")
+        fulldf.to_csv("processed/alldata.csv", index=False)
 
     def unit_conversion(self, fulldf):
         # N2O conversion function
