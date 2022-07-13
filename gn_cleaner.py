@@ -18,7 +18,8 @@ class data_cleaner():
                 rep_list = os.listdir("GRACEnet/" + site + "/" + treatment)
                 for rep in rep_list:
                     series_list = os.listdir("GRACEnet/" + site + "/" + treatment + "/" + rep)
-                    print(series_list[0])
+                    if len(series_list) == 0:
+                        continue
                     if ".csv" in series_list[0]:
                         working_dir = "GRACEnet/" + site + "/" + treatment + "/" + rep
                         print(working_dir)
@@ -151,10 +152,13 @@ class data_cleaner():
 
     def unit_conversion(self, fulldf):
         # N2O conversion function
-        if fulldf.soil_vwc[0] > 1:
-            b = fulldf[["soil_vwc"]].apply(lambda a: a / 100)
-            fulldf.drop("soil_vwc", axis=1, inplace=True)
-            fulldf["soil_vwc"] = b
+        try:
+            if fulldf.soil_vwc[0] > 1:
+                b = fulldf[["soil_vwc"]].apply(lambda a: a / 100)
+                fulldf.drop("soil_vwc", axis=1, inplace=True)
+                fulldf["soil_vwc"] = b
+        except:
+            pass
         return fulldf
 
     def add_management(self, fulldf, fert_date_list, fert_form_list, fert_quant_list, plant_date_list,
@@ -295,6 +299,7 @@ class data_cleaner():
         datetime_index = pd.DatetimeIndex(datetime_series.values)
         dailydf = dailydf.set_index(datetime_index)
         if datatype == "precipitation_mm" or datatype == "nitrogen_applied_kg":
+            print(dailydf)
             df_reindexed = dailydf.reindex(pd.date_range(start=dailydf.index.min(),
                                                          end=dailydf.index.max(),
                                                          freq='1D'), fill_value="0")
