@@ -52,6 +52,10 @@ class data_cleaner():
                 datatype = "n2o_flux"
             elif "precip" in filename.lower():
                 datatype = "precipitation_mm"
+            elif "temp_max" in filename.lower():
+                datatype = "air_temp_max"
+            elif "temp_min" in filename.lower():
+                datatype = "air_temp_min"
             elif "air" in filename.lower():
                 datatype = "air_temp_c"
             elif "soil t" in filename.lower():
@@ -117,7 +121,7 @@ class data_cleaner():
         # Reorganize column order
         db_columns = ['experiment_id', 'Date', 'n2o_flux', 'soil_vwc', 'soil_wfps', 'soil_temp_c', 'air_temp_c',
                       'precipitation_mm', 'nitrogen_applied_kg_ha', 'nitrogen_form', 'mgmt', 'nh4_mg_n_kg',
-                      'no3_mg_n_kg', 'planted_crop']
+                      'no3_mg_n_kg', 'planted_crop', 'air_temp_max', 'air_temp_min']
         df_columns = fulldf.columns
         shared_columns = []
         for column in db_columns:
@@ -225,6 +229,13 @@ class data_cleaner():
         return fulldf
 
     def daily_avg(self, predictordf, datatype):
+        for index, row in predictordf.iterrows():
+            #if row[datatype] == "#VALUE!":
+            #    predictordf = predictordf.drop(index, axis=0)
+            try:
+                check = float(row[datatype])
+            except:
+                predictordf =predictordf.drop(index, axis=0)
         fluxstart = predictordf.iloc[:1]
         fluxstart = list(fluxstart.Date)
         fluxstart = fluxstart[0]
@@ -237,8 +248,13 @@ class data_cleaner():
         delta = timedelta(days=1)
         datetime_series = pd.to_datetime(predictordf['Date'])
         predictordf['Date'] = datetime_series
+        print(predictordf)
+
         datetime_index = pd.DatetimeIndex(datetime_series.values)
         predictordf = predictordf.set_index(datetime_index)
+
+
+        print(predictordf)
         daily_list = []
         while iterdate <= enddate:
             nextday = iterdate + delta
@@ -257,30 +273,16 @@ class data_cleaner():
             day_data = list(day_data.loc[:, datatype])
             day_data = [float(i) for i in day_data]
 
+
+
             # Find the average value of measurements on that day
             start_second = day_df.iloc[:1]
             start_second = list(start_second.Date)[0]
             end_second = day_df.iloc[-1:]
             end_second = list(end_second.Date)[0]
-            # If data has only a date stamp, average all values
-            if start_second == end_second:
-                day_average = statistics.mean(day_data)
-                day_list = [iterdate, day_average]
-            # If full timestamp is available, find the time-weighted average
-            else:
-                seconds_list = []
-                iter_sec = start_second
-                while iter_sec <= end_second:
-                    seconds_list.append(iter_sec)
-                    iter_sec = iter_sec + timedelta(seconds=1)
-                secondsdf = pd.DataFrame(seconds_list, columns=["Date"])
-                day_df = day_df.merge(secondsdf, how='outer', on=['Date'])
-                day_df.sort_values(by='Date', inplace=True)
-                day_df = day_df.reset_index(drop=True)
-                day_df[datatype] = day_df[datatype].astype(float)
-                day_df[datatype].interpolate(method='linear', limit_direction='forward', inplace=True, axis=0)
-                daily_average = day_df[datatype].mean()
-                day_list = [iterdate, daily_average]
+            # average all values
+            day_average = statistics.mean(day_data)
+            day_list = [iterdate, day_average]
 
             # Update new list of average daily values
             daily_list.append(day_list)

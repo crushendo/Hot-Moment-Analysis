@@ -20,7 +20,7 @@ class gn_formatter():
         gracedf.sort_values(by=['ExpUnitID', 'Date'], inplace=True)
         gracedf.reset_index(inplace = True)
         del gracedf['index']
-        weatherdf = pd.read_csv("GN_Master/PrecipDaily.csv")
+        weatherdf = pd.read_csv("GN_Master/WeatherDaily.csv")
         gn_formatter.formatter(gracedf, weatherdf)
 
     def formatter(self, gracedf, weatherdf):
@@ -32,7 +32,8 @@ class gn_formatter():
             sitedf = gracedf.query('SiteID == @site')
             treatments = sitedf['TreatmentID'].unique()
             siteweather = weatherdf.query('SiteID == @site')
-            precipdf = siteweather[['Weather Date', 'Precip mm/d']]
+            precipdf = siteweather[['Weather Date', 'Precip mm/d', 'Temp Max degC', 'Temp Min degC',
+                                    'Soil Temp 10cm degC']]
 
             format1 = "%m/%d/%Y"
             format2 = "%Y-%m-%d"
@@ -128,9 +129,17 @@ class gn_formatter():
                                     "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + str(i) + "/" + 'vwc.csv',
                                     index=False)
                             if precipdf["Precip mm/d"].notnull().sum() > 0:
-                                precipdf.to_csv(
+                                precipdf[['Weather Date', 'Precip mm/d']].to_csv(
                                     "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + str(
                                         i) + "/" + 'precip.csv', index=False)
+                            if precipdf["Temp Max degC"].notnull().sum() > 0:
+                                precipdf[['Weather Date', 'Temp Max degC']].to_csv(
+                                    "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + str(
+                                        i) + "/" + 'air_temp_max.csv', index=False)
+                            if precipdf["Temp Min degC"].notnull().sum() > 0:
+                                precipdf[['Weather Date', 'Temp Min degC']].to_csv(
+                                    "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + str(
+                                        i) + "/" + 'air_temp_min.csv', index=False)
                             startindex = gapindex
                             i += 1
 
@@ -165,9 +174,17 @@ class gn_formatter():
                                     "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + str(i) + "/" + 'vwc.csv',
                                     index=False)
                             if precipdf["Precip mm/d"].notnull().sum() > 0:
-                                precipdf.to_csv(
+                                precipdf[['Weather Date', 'Precip mm/d']].to_csv(
                                     "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + str(
                                         i) + "/" + 'precip.csv', index=False)
+                            if precipdf["Temp Max degC"].notnull().sum() > 0:
+                                precipdf[['Weather Date', 'Temp Max degC']].to_csv(
+                                    "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + str(
+                                        i) + "/" + 'air_temp_max.csv', index=False)
+                            if precipdf["Temp Min degC"].notnull().sum() > 0:
+                                precipdf[['Weather Date', 'Temp Min degC']].to_csv(
+                                    "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + str(
+                                        i) + "/" + 'air_temp_min.csv', index=False)
                             #gapdf.query()
 
                     # Else, process the entire time series
@@ -191,10 +208,15 @@ class gn_formatter():
                             vwcdf.to_csv("GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + 'vwc.csv',
                                          index=False)
                         if precipdf["Precip mm/d"].notnull().sum() > 0:
-                            precipdf.to_csv("GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + 'precip.csv',
-                                            index=False)
+                            precipdf[['Weather Date', 'Precip mm/d']].to_csv(
+                                "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + 'precip.csv', index=False)
+                        if precipdf["Temp Max degC"].notnull().sum() > 0:
+                            precipdf[['Weather Date', 'Temp Max degC']].to_csv(
+                                "GRACEnet/" + site + "/" + treatment + "/" + rep + '/air_temp_max.csv', index=False)
+                        if precipdf["Temp Min degC"].notnull().sum() > 0:
+                            precipdf[['Weather Date', 'Temp Min degC']].to_csv(
+                                "GRACEnet/" + site + "/" + treatment + "/" + rep + '/air_temp_min.csv', index=False)
                         print("GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + 'flux.csv')
-
 
 
 if __name__ == '__main__':
