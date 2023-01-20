@@ -7,7 +7,6 @@ import scipy.stats as stats
 def test_stat(input_series, iteration, inputdf):
     y = list(inputdf['y'].values.tolist())
     y = [item for sublist in y for item in sublist]
-    print(y)
     std_dev = np.std(y)
     avg_y = np.mean(y)
     abs_val_minus_avg = abs(y - avg_y)
@@ -15,9 +14,6 @@ def test_stat(input_series, iteration, inputdf):
     max_ind = int(inputdf[['y']].idxmax())
     #max_ind = np.argmax(abs_val_minus_avg)
     cal = max_of_deviations / std_dev
-    print('Test {}'.format(iteration))
-    print("Test Statistics Value(R{}) : {}".format(iteration, cal))
-    print(max_ind)
     return cal, max_ind
 
 
@@ -26,7 +22,6 @@ def calculate_critical_value(size, alpha, iteration):
     numerator = (size - 1) * np.sqrt(np.square(t_dist))
     denominator = np.sqrt(size) * np.sqrt(size - 2 + np.square(t_dist))
     critical_value = numerator / denominator
-    print("Critical Value(λ{}): {}".format(iteration, critical_value))
     return critical_value
 
 
@@ -48,9 +43,7 @@ def ESD_Test(input_series, alpha, max_outliers):
         critical = calculate_critical_value(len(inputdf.index), alpha, iterations)
         check = check_values(stat, critical, inputdf, max_index, iterations, output_series)
         if check == 'yes':
-            print("HERE")
             output_series.loc[max_index, ['hot_moment']] = int(1)
-            print(output_series.iloc[max_index])
         inputdf.drop(max_index, inplace=True)
         critical_vals.append(critical)
         stats.append(stat)

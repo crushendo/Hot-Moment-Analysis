@@ -25,10 +25,10 @@ class hot_moment():
                                        database='rackett_fluxdb')
         df = sqlio.read_sql_query("""SELECT * FROM InterpolatedFlux """, conn)
         conn.close()
-        #hot_moment.iqr_classifier(df)
+        hot_moment.iqr_classifier(df)
         #hot_moment.genESD_classifier(df)
         #hot_moment.forest_classifier(df)
-        hot_moment.changepoint_classifier(df)
+        #hot_moment.changepoint_classifier(df)
         #hot_moment.iqr_graph(df)
         #hot_moment.imr_classifier(df)
         #exp_num_list = np.arange(30,37)
@@ -59,26 +59,29 @@ class hot_moment():
             expdf = df.query('experiment_id == @experiment')
             exp_flux = list(expdf.n2o_flux)
             exp_len = len(exp_flux)
-            print(exp_len)
             outputdf = gesd.ESD_Test(exp_flux, 0.05, int(exp_len * .3))
             hmlol = outputdf['hot_moment'].values.tolist()
             hm_list = [item for sublist in hmlol for item in sublist]
-            print(hm_list)
-            expdf['gesd_hm'] = pd.Series(hm_list)
+            expdf['gesd_hm'] = (hm_list)
 
+            # Exclude low flux anomalies
+            median_flux = expdf['n2o_flux'].median()
+            for index, row in expdf.iterrows():
+                if row['n2o_flux'] <= median_flux and row['gesd_hm'] == 1:
+                    expdf.loc[index, 'forest_hm'] = 0
+
+            '''
             for row in expdf.index:
                 print(row)
                 current_id = expdf["id"][row]
                 df.loc[df["id"] == current_id, "iqr_hm"] = expdf["gesd_hm"][row]
                 print(df.loc[df["id"] == current_id, "iqr_hm"])
-
-            '''
-            plt.scatter(expdf['date'], expdf['n2o_flux'], color='b', linestyle='-', label='Daily Flux')
             
+
             colddf = expdf.copy()
-            colddf.loc[colddf["gesd"] == 1, "n2o_flux"] = np.nan
+            colddf.loc[colddf["gesd_hm"] == 1, "n2o_flux"] = np.nan
             hotdf = expdf.copy()
-            hotdf.loc[hotdf["gesd"] == 0, "n2o_flux"] = np.nan
+            hotdf.loc[hotdf["gesd_hm"] == 0, "n2o_flux"] = np.nan
             plt.scatter(hotdf['date'], hotdf['n2o_flux'], color='r', label='Hot Moment')
             plt.scatter(colddf['date'], colddf['n2o_flux'], color='b', label='Background')
             
@@ -86,7 +89,12 @@ class hot_moment():
             plt.legend()
             plt.show()
             '''
-            break
+
+            for index, row in expdf.iterrows():
+                df.loc[index, 'gesd_hm'] = row.gesd_hm
+
+
+
         try:
             conn = mysql.connector.connect(user='rackett', password='j4FApKeQjC!2',
                                            host='mariadb-compx0.oit.utk.edu',
@@ -101,6 +109,7 @@ class hot_moment():
             cur.execute(QUERY)
         cur.execute('COMMIT')
         conn.close()
+
 
     def forest_classifier(self, df):
         experiments = pd.unique(df.experiment_id)
@@ -223,7 +232,7 @@ class hot_moment():
             print(expdf)
             q75, q25 = np.percentile(expdf['n2o_flux'], [75, 25])
             iqr = q75 - q25
-            threshold = q75 + iqr
+            threshold = q75 + 1.5 * iqr
             print(threshold)
             for row in expdf.index:
                 print(row)
@@ -237,7 +246,7 @@ class hot_moment():
             conn = mysql.connector.connect(user='rackett', password='j4FApKeQjC!2',
                                            host='mariadb-compx0.oit.utk.edu',
                                            database='rackett_fluxdb')
-            print('Python connected to PostgreSQL!')
+            print('Python connected to Database!')
         except:
             print("Failed to connect to database")
         cur = conn.cursor()
