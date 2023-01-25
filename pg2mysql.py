@@ -8,6 +8,7 @@ from config.config import config
 from src.data.db_conn import load_db_table
 import mysql.connector
 import math
+import sys
 import random
 import time
 
@@ -75,6 +76,7 @@ class pg2mysql():
                 # Get list of treatment_id's associated with this publication, remove duplicates
                 pub_treatments = list(allexpdf.loc[allexpdf['paper_id'] == pub_id, 'treatment_id'].unique())
                 print(pub_treatments)
+
                 # Iterate through experiments
                 for treatment in pub_treatments:
                     iter_treat = allexpdf.loc[allexpdf['treatment_id'] == treatment].iloc[0]
@@ -91,7 +93,7 @@ class pg2mysql():
                         iter_rep = allexpdf.loc[allexpdf['experiment_id'] == rep_id].iloc[0]
                         # Check the first daily measurement data from alldatadf for this replication
                         rep_measurements = alldatadf.loc[alldatadf['experiment_id'] == rep_id]
-                        #print(rep_measurements.head())
+
                         try:
                             rep_iter = rep_measurements.iloc[0].to_frame().transpose()
                             # Assign boolean values to each measurement type based on whether or not there is data
@@ -109,12 +111,15 @@ class pg2mysql():
 
                         # Rearrange and add columns to rep_measurements to match columns of daily_data_df
                         rep_measurements['RepID'] = rep_counter + 1
+                        rep_measurements['Harvest'] = None
+                        rep_measurements['Tillage'] = None
+                        rep_measurements['IrrigationApplied'] = None
                         rep_measurements = rep_measurements[['RepID', 'date', 'n2o_flux', 'soil_vwc', 'soil_wfps',
                                                              'soil_temp_c', 'air_temp_c', 'precipitation_mm',
-                                                             'nitrogen_applied', 'nitrogen_form', 'planted_crop',
-                                                             'harvest', 'tillage', 'irrigation_applied', 'iqr_hm',
-                                                             'air_temp_max', 'air_temp_min', 'nh4_n_mg_kg',
-                                                             'no3_n_mg_kg']]
+                                                             'nitrogen_applied_kg_ha', 'nitrogen_form', 'planted_crop',
+                                                             'Harvest', 'Tillage', 'IrrigationApplied', 'iqr_hm',
+                                                             'air_temp_max', 'air_temp_min', 'nh4_mg_n_kg',
+                                                             'no3_mg_n_kg', 'mgmt']]
 
                         # Add replications to replicationdf
                         replicationdf.loc[rep_counter] = [rep_counter + 1, treatment_counter + 1,
@@ -131,8 +136,10 @@ class pg2mysql():
 
                 i += 1
 
-            except:
-                print("No site found for publication: ", pub_id)
+            except Exception as e:
+                # Print exception error message
+                print(e)
+
                 expdf.loc[i] = [i + 1, "???", pub_id]
                 i += 1
                 continue
@@ -141,6 +148,7 @@ class pg2mysql():
         expdf = expdf.sort_values(by=['ExperimentID'])
         treatmentdf = treatmentdf.sort_values(by=['TreatmentID'])
         replicationdf = replicationdf.sort_values(by=['RepID'])
+
         # Save dataframes to csv
         expdf.to_csv('experiments.csv', index=False)
         treatmentdf.to_csv('treatments.csv', index=False)
