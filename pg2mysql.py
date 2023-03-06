@@ -22,9 +22,9 @@ class pg2mysql():
         # Get data from old postgres databases
         params = config(config_db='database.ini')
         conn = psycopg2.connect(**params)
+
         allexpdf = sqlio.read_sql_query("""SELECT * FROM "ExperimentalMethods" """, conn)
         pubsdf = allexpdf.drop_duplicates(subset=['paper_id'])
-
         alldatadf = sqlio.read_sql_query("""SELECT * FROM "DailyPredictors" """, conn)
 
         # Connect to mysql database
@@ -46,11 +46,12 @@ class pg2mysql():
     def fill_experiments(self, new_sitedf, pubsdf, allexpdf, alldatadf):
         new_sitedf = new_sitedf.round({'Latitude': 2, 'Longitude': 2})
         print(new_sitedf.head())
+
         # Create dataframe for experiments table
-        expdf = pd.DataFrame(columns=['ExperimentID', 'SiteID', 'PublicationID'])
-        treatmentdf = pd.DataFrame(columns=['TreatmentID', 'ExperimentID', 'PrimaryCrop', 'SecondaryCrop', 'CoverCrop',
-                                            'Tillage', 'Management', 'FluxInstrument'])
-        replicationdf = pd.DataFrame(columns=['RepID', 'TreatmentID',  'Sand', 'Silt', 'Clay', 'SOM', 'pH',
+        expdf = pd.DataFrame(columns=['ExperimentID', 'ExperimentName', 'SiteID', 'PublicationID'])
+        treatmentdf = pd.DataFrame(columns=['TreatmentID', 'TreatmentName', 'ExperimentID', 'PrimaryCrop',
+                                            'SecondaryCrop', 'CoverCrop', 'Tillage', 'Management', 'FluxInstrument'])
+        replicationdf = pd.DataFrame(columns=['RepID', 'RepName', 'TreatmentID',  'Sand', 'Silt', 'Clay', 'SOM', 'pH',
                                               'BulkDensity', 'Air_T_Meas', 'Precip_Meas', 'Soil_T_Meas', 'VWC_Meas',
                                               'WFPS_Meas'])
         daily_data_df = pd.DataFrame(
@@ -65,12 +66,17 @@ class pg2mysql():
             pub_id = row['paper_id']
             lat = float(round(row['latitude'], 2))
             long = float(round(row['longitude'], 2))
+
             # Query new_sitedf for longitude and latitude
             try:
                 site_id = new_sitedf.loc[(new_sitedf['Latitude'] == lat) & (
                         new_sitedf['Longitude'] == long), 'SiteID'].iloc[0]
+
+                # Get the experiment name associated with this publication
+                exp_name = allexpdf.loc[allexpdf['paper_id'] == pub_id, 'gracenet_site'].iloc[0]
+
                 # Add row to expdf
-                expdf.loc[i] = [i + 1, site_id, pub_id]
+                expdf.loc[i] = [i + 1, exp_name, site_id, pub_id]
 
                 # For the number of treatments in this experiment, add a row to treatmentdf
                 # Get list of treatment_id's associated with this publication, remove duplicates
@@ -80,7 +86,8 @@ class pg2mysql():
                 # Iterate through experiments
                 for treatment in pub_treatments:
                     iter_treat = allexpdf.loc[allexpdf['treatment_id'] == treatment].iloc[0]
-                    treatmentdf.loc[treatment_counter] = [treatment_counter + 1, i + 1, iter_treat['crop'],
+                    treatmentdf.loc[treatment_counter] = [treatment_counter + 1, i + 1,
+                                                          iter_treat['gracenet_treatment'], iter_treat['crop'],
                                                           None, iter_treat['cover_crop'],
                                                           iter_treat['tillage'], iter_treat['management'],
                                                           iter_treat['n2o_instrument']]
@@ -91,6 +98,7 @@ class pg2mysql():
                     experiment_reps = list(allexpdf.loc[allexpdf['treatment_id'] == treatment, 'experiment_id'])
                     for rep_id in experiment_reps:
                         iter_rep = allexpdf.loc[allexpdf['experiment_id'] == rep_id].iloc[0]
+
                         # Check the first daily measurement data from alldatadf for this replication
                         rep_measurements = alldatadf.loc[alldatadf['experiment_id'] == rep_id]
 
@@ -122,7 +130,7 @@ class pg2mysql():
                                                              'no3_mg_n_kg', 'mgmt']]
 
                         # Add replications to replicationdf
-                        replicationdf.loc[rep_counter] = [rep_counter + 1, treatment_counter + 1,
+                        replicationdf.loc[rep_counter] = [rep_counter + 1, iter_rep['gracenet_rep'], treatment_counter + 1,
                                                           iter_rep['percent_sand'], iter_rep['percent_silt'],
                                                           iter_rep['percent_clay'], iter_rep['om_percent'],
                                                           iter_rep['pH'], iter_rep['bulk_density'], air_t, precip,
@@ -140,7 +148,7 @@ class pg2mysql():
                 # Print exception error message
                 print(e)
 
-                expdf.loc[i] = [i + 1, "???", pub_id]
+                expdf.loc[i] = [i + 1, "???", "???", pub_id]
                 i += 1
                 continue
 
@@ -148,6 +156,7 @@ class pg2mysql():
         expdf = expdf.sort_values(by=['ExperimentID'])
         treatmentdf = treatmentdf.sort_values(by=['TreatmentID'])
         replicationdf = replicationdf.sort_values(by=['RepID'])
+        daily_data_df = daily_data_df.sort_values(by=['RepID', 'date'])
 
         # Save dataframes to csv
         expdf.to_csv('experiments.csv', index=False)

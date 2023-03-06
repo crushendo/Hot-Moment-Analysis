@@ -19,12 +19,16 @@ import ruptures as rpt
 class hot_moment():
 
     def main(self):
-        # Read database - PostgreSQL
-        conn = mysql.connector.connect(user='rackett', password='j4FApKeQjC!2',
-                                       host='mariadb-compx0.oit.utk.edu',
-                                       database='rackett_fluxdb')
-        df = sqlio.read_sql_query("""SELECT * FROM InterpolatedFlux """, conn)
-        conn.close()
+        # Connect to mysql database
+        cnx = mysql.connector.connect(user='root', password='Kh18riku!',
+                                      host='127.0.0.1',
+                                      database='global_n2o')
+        cursor = cnx.cursor()
+        query = ("SELECT * FROM LinearMeasurement")
+
+        # Execute the query and fetch all results
+        df = pd.read_sql(query, cnx)
+        cnx.close()
         hot_moment.iqr_classifier(df)
         #hot_moment.genESD_classifier(df)
         #hot_moment.forest_classifier(df)
@@ -225,37 +229,39 @@ class hot_moment():
         plt.show()
 
     def iqr_classifier(self, df):
-        experiments = pd.unique(df.experiment_id)
+        experiments = pd.unique(df.RepID)
         print(experiments)
         for experiment in experiments:
-            expdf = df.loc[df['experiment_id'] == experiment]
+            expdf = df.loc[df['RepID'] == experiment]
             print(expdf)
-            q75, q25 = np.percentile(expdf['n2o_flux'], [75, 25])
+            q75, q25 = np.percentile(expdf['N2OFlux'], [75, 25])
             iqr = q75 - q25
             threshold = q75 + 1.5 * iqr
             print(threshold)
             for row in expdf.index:
                 print(row)
-                if expdf["n2o_flux"][row] > threshold:
-                    current_id = expdf["id"][row]
-                    df.loc[df["id"] == current_id, "iqr_hm"] = 1
+                if expdf["N2OFlux"][row] > threshold:
+                    current_id = expdf["LinMeasID"][row]
+                    df.loc[df["LinMeasID"] == current_id, "IQRHM"] = 1
                 else:
-                    current_id = expdf["id"][row]
-                    df.loc[df["id"] == current_id, "iqr_hm"] = 0
+                    current_id = expdf["LinMeasID"][row]
+                    df.loc[df["LinMeasID"] == current_id, "IQRHM"] = 0
         try:
-            conn = mysql.connector.connect(user='rackett', password='j4FApKeQjC!2',
-                                           host='mariadb-compx0.oit.utk.edu',
-                                           database='rackett_fluxdb')
+            # Connect to mysql database
+            cnx = mysql.connector.connect(user='root', password='Kh18riku!',
+                                          host='127.0.0.1',
+                                          database='global_n2o')
+            cur = cnx.cursor()
             print('Python connected to Database!')
         except:
             print("Failed to connect to database")
-        cur = conn.cursor()
+
         for d in range(0, len(df)):
-            QUERY = """ UPDATE InterpolatedFlux SET iqr_hm='%s' WHERE InterpolatedFlux.id='%s'
-                    """ % (df['iqr_hm'][d], df['id'][d])
+            QUERY = """ UPDATE LinearMeasurement SET IQRHM='%s' WHERE LinearMeasurement.LinMeasID='%s'
+                    """ % (df['IQRHM'][d], df['LinMeasID'][d])
             cur.execute(QUERY)
         cur.execute('COMMIT')
-        conn.close()
+        cnx.close()
 
     def imr_classifier(self, df):
         fulldf = df
