@@ -14,6 +14,7 @@ import mysql.connector
 import pandas.io.sql as sqlio
 import gesd
 from sklearn.ensemble import IsolationForest
+from pyod.models.mcd import MCD
 import ruptures as rpt
 
 class hot_moment():
@@ -29,7 +30,8 @@ class hot_moment():
         # Execute the query and fetch all results
         df = pd.read_sql(query, cnx)
         cnx.close()
-        hot_moment.iqr_classifier(df)
+        #hot_moment.iqr_classifier(df)
+        hot_moment.mcd_classifier(df)
         #hot_moment.genESD_classifier(df)
         #hot_moment.forest_classifier(df)
         #hot_moment.changepoint_classifier(df)
@@ -259,6 +261,47 @@ class hot_moment():
         for d in range(0, len(df)):
             QUERY = """ UPDATE LinearMeasurement SET IQRHM='%s' WHERE LinearMeasurement.LinMeasID='%s'
                     """ % (df['IQRHM'][d], df['LinMeasID'][d])
+            cur.execute(QUERY)
+        cur.execute('COMMIT')
+        cnx.close()
+
+    def mcd_classifier(self, df):
+        rep_ids = df['RepID'].unique()
+        for rep_id in rep_ids:
+            flux = df[df['RepID'] == rep_id][['N2OFlux']]
+            # Add column to flux dataframe counting upward from 0
+            flux['index'] = np.arange(len(flux))
+            print(flux.head())
+            # MCD
+            mcd = MCD(contamination=0.25)
+            mcd.fit(flux)
+            mcd_pred = mcd.predict(flux)
+
+            # Get the interquartile range
+            q75, q25 = np.percentile(flux['N2OFlux'], [75, 25])
+            iqr = q75 - q25
+            halfiqr = iqr / 2
+            median = np.median(flux['N2OFlux'])
+            threshold = median + halfiqr
+
+            # Set the MCD column to 1 if the flux is above the threshold
+            df.loc[df["RepID"] == rep_id, "MCDHM"] = mcd_pred
+
+            # Apply filter to prevent outliers where flux is below threshold of 0.5 IQR
+            df.loc[(df['RepID'] == rep_id) & (df['N2OFlux'] <= threshold), 'MCD'] = 0
+        try:
+            # Connect to mysql database
+            cnx = mysql.connector.connect(user='root', password='Kh18riku!',
+                                          host='127.0.0.1',
+                                          database='global_n2o')
+            cur = cnx.cursor()
+            print('Python connected to Database!')
+        except:
+            print("Failed to connect to database")
+
+        for d in range(0, len(df)):
+            QUERY = """ UPDATE LinearMeasurement SET MCDHM='%s' WHERE LinearMeasurement.LinMeasID='%s'
+                    """ % (df['MCDHM'][d], df['LinMeasID'][d])
             cur.execute(QUERY)
         cur.execute('COMMIT')
         cnx.close()
