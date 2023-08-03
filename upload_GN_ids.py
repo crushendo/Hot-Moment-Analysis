@@ -4,7 +4,6 @@ import pandas
 import pandas as pd
 import numpy as np
 import datetime
-import psycopg2
 import pandas.io.sql as sqlio
 from config.config import config
 from src.data.db_conn import load_db_table

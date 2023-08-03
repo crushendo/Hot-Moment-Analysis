@@ -15,7 +15,6 @@ import pandas.io.sql as sqlio
 import gesd
 from sklearn.ensemble import IsolationForest
 from pyod.models.mcd import MCD
-import ruptures as rpt
 
 class hot_moment():
 
@@ -273,9 +272,13 @@ class hot_moment():
             flux['index'] = np.arange(len(flux))
             print(flux.head())
             # MCD
-            mcd = MCD(contamination=0.25)
+            mcd = MCD(contamination=0.5)
             mcd.fit(flux)
             mcd_pred = mcd.predict(flux)
+            mcd_scores = mcd.decision_scores_
+
+            # Combine mcd_pred and mcd_scores into a dataframe
+            mcd_df = pd.DataFrame({'MCD': mcd_pred, 'MCD_Score': mcd_scores})
 
             # Get the interquartile range
             q75, q25 = np.percentile(flux['N2OFlux'], [75, 25])
@@ -284,11 +287,11 @@ class hot_moment():
             median = np.median(flux['N2OFlux'])
             threshold = median + halfiqr
 
-            # Set the MCD column to 1 if the flux is above the threshold
-            df.loc[df["RepID"] == rep_id, "MCDHM"] = mcd_pred
-
             # Apply filter to prevent outliers where flux is below threshold of 0.5 IQR
-            df.loc[(df['RepID'] == rep_id) & (df['N2OFlux'] <= threshold), 'MCD'] = 0
+            df.loc[(df['RepID'] == rep_id) & (df['N2OFlux'] <= threshold), 'MCDHM'] = 0
+            # Apply filter to prevent HM where flux is below 5
+            df.loc[(df['RepID'] == rep_id) & (df['N2OFlux'] < 5), 'MCDHM'] = 0
+
         try:
             # Connect to mysql database
             cnx = mysql.connector.connect(user='root', password='Kh18riku!',

@@ -50,6 +50,10 @@ class data_cleaner(tk.Frame):
             predictordf = pd.read_csv(filename, header=None, names=['Date', datatype])
             if predictordf["Date"].iloc[0] == "Date" or predictordf["Date"].iloc[0] == " Date":
                 predictordf = predictordf.iloc[1:]
+            # Change date format to datetime
+            print(predictordf)
+            predictordf['Date'] = pd.to_datetime(predictordf['Date'])
+
             predictordf.sort_values(by='Date', inplace=True)
             predictordf = predictordf.reset_index(drop=True)
             originaldf = predictordf
@@ -131,10 +135,13 @@ class data_cleaner(tk.Frame):
             print(b)
             fulldf.drop("nh4_mg_n_kg", axis=1, inplace=True)
             fulldf["nh4_mg_n_kg"] = b
-        if fulldf.soil_wfps[0] > 1:
-            b = fulldf[["soil_wfps"]].apply(lambda a: a / 100)
-            fulldf.drop("soil_wfps", axis=1, inplace=True)
-            fulldf["soil_wfps"] = b
+        try:
+            if fulldf.soil_wfps[0] > 1:
+                b = fulldf[["soil_wfps"]].apply(lambda a: a / 100)
+                fulldf.drop("soil_wfps", axis=1, inplace=True)
+                fulldf["soil_wfps"] = b
+        except:
+            pass
         return fulldf
 
     def add_management(self, fulldf):
