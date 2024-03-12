@@ -28,9 +28,27 @@ class hot_moment():
 
         # Execute the query and fetch all results
         df = pd.read_sql(query, cnx)
+
+        # df = df where N2OFlux < 5 and HMTruth = 1
+        df = df.loc[(df['N2OFlux'] < 5) & (df['HMTruth'] == 1)]
+        # Where N2OFlux < 5 and IQRHM = 1, set IQRHM = 0
+        df.loc[(df['N2OFlux'] < 5) & (df['HMTruth'] == 1), 'HMTruth'] = 0
+        # iterate though linmeasid. update hmtruth = 0 where linmeasid = linmeasid
+        # and n2oflux < 5 and hmtruth = 1
+        for index, row in df.iterrows():
+            linmeasid = row['LinMeasID']
+            n2oflux = row['N2OFlux']
+            hmtruth = row['HMTruth']
+            if n2oflux < 5:
+                query = "UPDATE LinearMeasurement SET HMTruth = 0 WHERE LinMeasID = %s"
+                cursor.execute(query, (linmeasid,))
+            cnx.commit()
+
+
+
         cnx.close()
         #hot_moment.iqr_classifier(df)
-        hot_moment.mcd_classifier(df)
+        #hot_moment.mcd_classifier(df)
         #hot_moment.genESD_classifier(df)
         #hot_moment.forest_classifier(df)
         #hot_moment.changepoint_classifier(df)
