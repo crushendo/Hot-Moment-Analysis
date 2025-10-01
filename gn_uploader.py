@@ -15,6 +15,7 @@ class gn_uploader():
     def main(self):
         reportdf = pd.read_csv("GRACEnet Processing Report.csv")
         uploaddf = reportdf.query("Greenlight == '*' & Uploaded != '*'")
+        print(uploaddf.head())
         dbdf = pd.DataFrame(columns=["paper_id", "n2o_instrument", 'crop', 'latitude', 'longitude', 'management', 'tillage',
         'soil_type', 'irrigation', 'climate', 'preceding_crop', 'cover_crop', 'daily_n2o_flux_units', 'id', 'experiment_id',
         'nitrogen_form', 'soil_texture', 'percent_clay', 'percent_silt', 'percent_sand', 'mean_annual_temp_c', 'mean_annual_precip_mm',
@@ -24,6 +25,9 @@ class gn_uploader():
             paper_id = gn_uploader.create_pub(row)
             dbdf, experiment_id, bulk_density, treatment_id = gn_uploader.create_exp(row, paper_id, dbdf)
             gn_uploader.upload_timeseries(row, paper_id, experiment_id, bulk_density, treatment_id)
+            reportdf.loc[index, "Uploaded"] = "*"
+            reportdf.to_csv("GRACEnet Processing Report.csv", index=False)
+        reportdf.to_csv("GRACEnet Processing Report.csv", index=False)
         dbdf.to_csv("Experimental Methods.csv", index=False)
 
     def create_pub(self, row):
@@ -33,7 +37,7 @@ class gn_uploader():
         sites_list = list(sitesdf.gracenet_site)
         max_id = list(sitesdf.id)[-1]
         if site in sites_list:
-            paper_id = list(sitesdf.query("SiteID == @site").paper_id)[0]
+            paper_id = list(sitesdf.query("gracenet_site == @site").id)[0]
             return paper_id
         else:
             id = int(max_id) + 1
@@ -45,6 +49,14 @@ class gn_uploader():
             print(enddate)
             persondf = pd.read_csv("Persons.csv")
             author = list(persondf.query("SiteID == @site & PrimaryContact == 'Yes'").LastName)[0]
+
+            # Write to CSV
+            datalist = [[id, title, enddate, author, None, True, site]]
+            pubdb = pd.DataFrame(data=datalist, columns=[
+                'id', 'title', 'pub_date', 'lead_author', 'citation', 'gracenet', 'gracenet_site'
+            ])
+            pubdb.to_csv("pub_csv.csv", index=False, header=False)
+
             try:
                 params = config(config_db='database.ini')
                 conn = psycopg2.connect(**params)
@@ -52,13 +64,31 @@ class gn_uploader():
             except:
                 print("Failed to connect to database")
             cur = conn.cursor()
+
+            f = open("pub_csv.csv", 'r')
+            cursor = conn.cursor()
+            try:
+                cursor.copy_from(f, 'Publications', sep=",", null="")
+                conn.commit()
+            except (Exception, psycopg2.DatabaseError) as error:
+                print("Error: %s" % error)
+                conn.rollback()
+                cursor.close()
+                cursor.query()
+                return 1
+            print("copy_from_file() done")
+            cursor.close()
+            '''
+            nonevar = "NULL"
             QUERY = """ 
             INSERT INTO "Publications" (id, title, pub_date, lead_author, citation, gracenet, gracenet_site)
             VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s')
-            """ % (id, title, enddate, author, None, True, site)
+            """ % (id, title, enddate, author, nonevar, True, site)
+
             print(QUERY)
-            #cur.execute(QUERY)
-            #cur.execute('COMMIT')
+            cur.execute(QUERY)
+            cur.execute('COMMIT')
+            '''
             return id
 
     def create_exp(self, row, paper_id, dbdf):
@@ -73,7 +103,13 @@ class gn_uploader():
         expdf.sort_values(by=['experiment_id'], inplace=True)
         fluxdf = pd.read_csv("MeasGHGFlux.csv")
         flux_repdf = fluxdf.query("ExpUnitID == @rep")
-        crop = list(flux_repdf.Crop)[0]
+        nonevar = 'None'
+        crops = flux_repdf.query("Crop != @nonevar")
+        crops = list(crops.Crop)
+        try:
+            crop = list(crops)[0]
+        except:
+            crop = 'None'
 
         # Get latest ids from exp table
         last_id = list(expdf.id)[-1]
@@ -85,7 +121,6 @@ class gn_uploader():
         if len(treatment_id) > 1:
             treatment_id = treatment_id[0]
         else:
-            print(int(list(expdf.treatment_id)[-1]))
             treatment_id = int(list(expdf.treatment_id)[-1]) + 1
 
         # Get experminental site data
@@ -115,6 +150,7 @@ class gn_uploader():
             bulk_density = list(soilphysdf["BulkDensity"])[0]
         except:
             bulk_density = math.nan
+
         if math.isnan(sand):
             sand = None
         if math.isnan(silt):
@@ -130,7 +166,6 @@ class gn_uploader():
             som = som[0]
         else:
             som = None
-        print(som)
         if som == None or math.isnan(som):
             som = None
         else:
@@ -148,10 +183,15 @@ class gn_uploader():
         irrigation = list(treatmentdf["Irrigation"])[0]
         cover = list(treatmentdf["Cover Crop"])[0]
         fertilizer_type = list(treatmentdf["Fertilizer Amendment Class"])[0]
+        try:
+            if math.isnan(fertilizer_type):
+                fertilizer_type = None
+        except:
+            pass
         organic = list(treatmentdf["Organic Management"])[0]
         if organic == "Yes":
             management = "Organic"
-        elif fertilizer_type == "None":
+        elif fertilizer_type == "None" or fertilizer_type == None:
             management = "Zero Input"
         elif tillage == "No Till" or tillage == "None":
             management = "No-till"
@@ -166,6 +206,7 @@ class gn_uploader():
         fertilizerdf = pd.read_csv("MgtAmendments.csv")
         fertilizerdf = fertilizerdf.query("ExpUnitID == @rep")
         series = row.Series
+        print(series)
         # Determine whether there is previous data from this experiment in an earlier time series (pastdf)
         if math.isnan(series):
             timeseriesdf = pd.read_csv("GRACEnet/" + site + "/" + treatment + "/" + rep + "/processed/" + "alldata.csv")
@@ -180,7 +221,6 @@ class gn_uploader():
         included_fertilizerdates = timeseriesdf[~timeseriesdf['nitrogen_form'].isnull()]
         included_fertilizerdates = list(included_fertilizerdates.Date)
         all_fertilizerdates = list(fertilizerdf.Date)
-        print(included_fertilizerdates)
         # Get first fertilizer date already included in the time series data
         try:
             first_fert_date = included_fertilizerdates[0]
@@ -191,7 +231,6 @@ class gn_uploader():
         try:
             first_data_date = list(timeseriesdf.Date)[0]
         except:
-            print(timeseriesdf)
             timeseriesdf.query()
             return
 
@@ -205,9 +244,7 @@ class gn_uploader():
             missing_range = [last_enddate + timedelta(days=idx) for idx in range(date_gap)]
             missing_range.reverse()
             for date in missing_range:
-                print(date)
                 formatted_date = datetime.strftime(date, "%Y-%m-%d")
-                print(formatted_date)
                 if formatted_date in all_fertilizerdates:
                     preseason_date = list(fertilizerdf.query("Date == @date").Date)[0]
                     preseason_kg = list(fertilizerdf.query("Date == @date").TotalNAmount)[0]
@@ -217,11 +254,9 @@ class gn_uploader():
         else:
             included_fertilizerdates.reverse()
             for date in all_fertilizerdates:
-                print(date)
                 formatted_date = datetime.strptime(date, "%m/%d/%Y")
                 dategap = first_data_date - formatted_date
                 if int(dategap.days) > 0 & int(dategap.days) < 90:
-                    print(fertilizerdf.query("Date == @date"))
                     preseason_date = list(fertilizerdf.query("Date == @date").Date)[0]
                     preseason_kg = list(fertilizerdf.query("Date == @date").TotalNAmount)[0]
                     preseason_form = list(fertilizerdf.query("Date == @date").AmendType)[0]
@@ -236,14 +271,46 @@ class gn_uploader():
         except:
             print("Failed to connect to database")
         cur = conn.cursor()
-        QUERY = """ 
+
+        # Write to CSV
+        datalist = [[paper_id, "Static Chamber", crop, latitude, longitude, management, tillage, None, irrigation, None,
+                     None, cover, "g N2O-N/ha/d", current_id, experiment_id, fertilizer_type, None, clay, silt, sand,
+                     mat, map, preseason_kg, preseason_form, preseason_date, ph, som, treatment_id, site, treatment,
+                     rep, bulk_density]]
+        expdb = pd.DataFrame(data=datalist)
+        expdb.to_csv("exp_csv.csv", index=False, header=False)
+
+        try:
+            params = config(config_db='database.ini')
+            conn = psycopg2.connect(**params)
+            print('Python connected to PostgreSQL!')
+        except:
+            print("Failed to connect to database")
+        cur = conn.cursor()
+
+        f = open("exp_csv.csv", 'r')
+        cursor = conn.cursor()
+        try:
+            cursor.copy_from(f, 'ExperimentalMethods', sep=",", null="")
+            conn.commit()
+        except (Exception, psycopg2.DatabaseError) as error:
+            print("Error: %s" % error)
+            conn.rollback()
+            cursor.close()
+            cursor.query()
+            return 1
+        print("copy_from_file() done")
+        cursor.close()
+
+
+        QUERY = """
         INSERT INTO "ExperimentalMethods" (paper_id, n2o_instrument, crop, latitude, longitude, management, tillage,
         soil_type, irrigation, climate, preceding_crop, cover_crop, daily_n2o_flux_units, id, experiment_id, 
         nitrogen_form, soil_texture, percent_clay, percent_silt, percent_sand, mean_annual_temp_c, mean_annual_precip_mm,
-        preseason_nitrogen_kg_ha, preseason_nitrogen_form, preseason_nitrogen_date, pH, om_percent, treatment_id,
+        preseason_nitrogen_kg_ha, preseason_nitrogen_form, preseason_nitrogen_date, "pH", om_percent, treatment_id,
         gracenet_site, gracenet_treatment, gracenet_rep, bulk_density)
         VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', 
-        '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
+        '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
         """ % (paper_id, "Static Chamber", crop, latitude, longitude, management, tillage, None, irrigation, None, None,
                cover, "g N2O-N/ha/d", current_id, experiment_id, fertilizer_type, None, clay, silt, sand, mat, map,
                preseason_kg, preseason_form, preseason_date, ph, som, treatment_id, site, treatment, rep, bulk_density)
@@ -261,16 +328,20 @@ class gn_uploader():
                                       'gracenet_treatment', 'gracenet_rep', 'bulk_density'])
         joindf = [dbdf, rowdf]
         dbdf = pd.concat(joindf)
-        #cur.execute(QUERY)
-        #cur.execute('COMMIT')
+        cur.execute(QUERY)
+        cur.execute('COMMIT')
+        
         return dbdf, experiment_id, bulk_density, treatment_id
 
     def upload_timeseries(self, row, paper_id, experiment_id, bulk_density, treatment_id):
         rep = row.Rep
         site = row.Site
         treatment = row.Treatment
-        series = row.Series
-        if series.isnull():
+        try:
+            series = str(int(row.Series))
+        except:
+            series = ""
+        if series == "":
             working_dir = "GRACEnet/" + site + "/" + treatment + "/" + rep + "/processed/"
         else:
             working_dir = "GRACEnet/" + site + "/" + treatment + "/" + rep + "/" + series + "/processed/"
@@ -288,6 +359,7 @@ class gn_uploader():
         # Format dataframe to match postgres table
         datadf['experiment_id'] = experiment_id
         datadf['treatment_id'] = treatment_id
+        datadf['id'] = None
         datadf['iqr_hm'] = None
         datadf['imr_hm'] = None
         datadf['nh4_mg_n_kg'] = None
@@ -301,8 +373,8 @@ class gn_uploader():
                 datadf[column] = None
         # Reorganize column order
         db_columns = ['experiment_id', 'Date', 'n2o_flux', 'soil_vwc', 'soil_wfps', 'soil_temp_c', 'air_temp_c',
-                      'precipitation_mm', 'nitrogen_applied_kg_ha', 'nitrogen_form', 'mgmt', 'nh4_mg_n_kg',
-                      'no3_mg_n_kg', 'planted_crop', 'air_temp_max', 'air_temp_min']
+                      'precipitation_mm', 'nitrogen_applied_kg_ha', 'id', 'nitrogen_form', 'mgmt', 'iqr_hm',
+                      'nh4_mg_n_kg', 'no3_mg_n_kg', 'imr_hm', 'planted_crop', 'air_temp_max', 'air_temp_min']
         df_columns = datadf.columns
         shared_columns = []
         for column in db_columns:
@@ -310,8 +382,6 @@ class gn_uploader():
                 shared_columns.append(column)
         print(shared_columns)
         datadf = datadf.reindex(columns=shared_columns)
-
-        datadf.to_csv(working_dir + "/alldata-db.csv", index=False)
 
         # Upload time series data to postgres
         try:
@@ -322,15 +392,27 @@ class gn_uploader():
             print("Failed to connect to database")
         cur = conn.cursor()
 
+        # Fill IDs with unique values
+        iddf = load_db_table(config_db='database.ini', query='SELECT * FROM "DailyPredictors"')
+        iddf.sort_values(by=['id'], inplace=True)
+        start_id = list(iddf.id)[-1]
+        start_id = int(start_id) + 1
+        dblen = datadf.shape[0]
+        id_list = np.arange(start_id, start_id + dblen, 1)
+        print(id_list)
+        datadf['id'] = id_list
+        datadf.to_csv(working_dir + "/alldata-db.csv", index=False, header=False)
+
         f = open(working_dir + "/alldata-db.csv", 'r')
         cursor = conn.cursor()
         try:
-            cursor.copy_from(f, 'DailyPredictors', sep=",")
+            cursor.copy_from(f, 'DailyPredictors', sep=",", null="")
             conn.commit()
         except (Exception, psycopg2.DatabaseError) as error:
             print("Error: %s" % error)
             conn.rollback()
             cursor.close()
+            cursor.query()
             return 1
         print("copy_from_file() done")
         cursor.close()
