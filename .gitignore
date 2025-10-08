@@ -1,3 +1,7 @@
 *.csv
 *.svg
 .venv*
+*.tif
+*.tiff
+!X_all-YEAR_SEPARATED.csv
+!Y_all-YEAR_SEPARATED.csv
